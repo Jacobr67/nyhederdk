@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Danske Nyheder — En ad gangen</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #1e1e1e;
+      color: #d0d0d0;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    h1 {
+      color: #ffffff;
+      margin-bottom: 20px;
+    }
+
+    .news-card {
+      background-color: #252525;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      margin: 0 auto 20px;
+      opacity: 1;
+      transform: translateY(0);
+      transition: transform 0.3s ease-out;
+      position: relative;
+      width: 90%;
+      max-width: 600px;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .news-card:active {
+      cursor: grabbing;
+    }
+
+    .news-card.visible {
+      opacity: 1;
+    }
+
+    .source {
+      font-weight: bold;
+      color: #ffffff;
+      margin-bottom: 5px;
+    }
+
+    .bias-indicator {
+      font-size: 0.8em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 10px;
+      opacity: 0.8;
+    }
+
+    .left {
+      background-color: #803333;
+    }
+
+    .center {
+      background-color: #805c33;
+    }
+
+    .right {
+      background-color: #334d80;
+    }
+
+    .news-card p {
+      color: #a0a0a0;
+      margin: 0 0 10px 0;
+      flex-grow: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 6;
+      -webkit-box-orient: vertical;
+      min-height: 6em;
+    }
+
+    .news-card h2 {
+      margin: 0 0 10px 0;
+      color: #d0d0d0;
+      word-wrap: break-word;
+      font-size: 1.5em;
+    }
+
+    .read-more {
+      display: inline-block;
+      padding: 8px 12px;
+      background-color: #4a6fa5;
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 4px;
+      text-align: center;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin-top: 10px;
+    }
+
+    .read-more:hover {
+      background-color: #3a5a85;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: fixed;
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%);
+      z-index: 1000;
+    }
+
+    .nav-btn {
+      padding: 12px 16px;
+      font-size: 1em;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .nav-btn:hover {
+      background-color: #666;
+    }
+
+    .nav-btn:disabled {
+      background-color: #2c2c2c;
+      cursor: default;
+    }
+
+    .end-message {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 1.2em;
+      color: #7fd17f;
+    }
+
+    .news-card img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+
+    /* Hide buttons on smaller screens */
+    @media (max-width: 768px) {
+      .buttons {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Danske Nyheder</h1>
+    <div id="newsCard" class="news-card"></div>
+    <div class="buttons">
+      <button class="nav-btn" id="prevBtn">⟵ Forrige</button>
+      <button class="nav-btn" id="nextBtn">Næste ⟶</button>
+    </div>
+    <div id="endMessage" class="end-message" style="display: none;">
+      🎉 Du har læst alle nyheder!
+    </div>
+  </div>
+
+  <script>
+    const rssFeeds = {
+      'Politiken': { url: 'https://politiken.dk/rss/senestenyt.rss', bias: 'left' },
+      'Videnskab.dk': { url: 'https://videnskab.dk/wp-json/rss/v1/feeds', bias: '' },
+      'Information': { url: 'https://www.information.dk/feed', bias: 'left' },
+      'DR Nyheder - Seneste nyt': { url: 'https://www.dr.dk/nyheder/service/feeds/senestenyt', bias: 'center' },
+      'TV2 ØST': { url: 'https://www.tv2east.dk/rss', bias: 'center' },
+      'Ekstra Bladet': { url: 'https://ekstrabladet.dk/rssfeed/nyheder/', bias: 'center' },
+      'Jyllands-Posten': { url: 'https://newsletter-proxy.aws.jyllands-posten.dk/v1/latestNewsRss/jyllands-posten.dk?count=10', bias: 'right' }
+    };
+
+    let articles = [];
+    let currentIndex = 0;
+    let isDragging = false;
+    let startY = 0;
+    let currentY = 0;
+    const dragThreshold = 200;
+
+    function getBiasText(bias) {
+      switch (bias) {
+        case 'left': return 'Venstreorienteret';
+        case 'center': return 'Centrum';
+        case 'right': return 'Højreorienteret';
+        default: return 'Ukendt';
+      }
+    }
+
+    async function fetchRSS() {
+      let fetched = [];
+      for (const [source, info] of Object.entries(rssFeeds)) {
+        try {
+          const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(info.url)}`);
+          const data = await response.json();
+          if (data.status === 'ok') {
+            const items = data.items.map(item => ({
+              title: item.title,
+              description: item.description,
+              link: item.link,
+              source,
+              bias: info.bias
+            }));
+            fetched = fetched.concat(items);
+          }
+        } catch (e) {
+          console.warn('Fejl ved hentning af', source, e);
+        }
+      }
+
+      articles = fetched.sort(() => Math.random() - 0.5);
+      showCard(currentIndex);
+    }
+
+    function showCard(index) {
+      const card = document.getElementById('newsCard');
+      const endMessage = document.getElementById('endMessage');
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+
+      if (articles.length === 0) return;
+
+      const item = articles[index];
+      const imgMatch = item.description.match(/<img[^>]*src="([^"]+)"[^>]*>/);
+      const imageUrl = imgMatch ? imgMatch[1] : 'https://via.placeholder.com/600x300?text=Ingen+billede';
+      const imageTag = `<img src="${imageUrl}" alt="Couldn't Load Image">`;
+      const textOnlyDesc = item.description.replace(/<[^>]+>/g, '');
+
+      card.innerHTML = `
+        <div class="source">${item.source}</div>
+        <div class="bias-indicator ${item.bias}">${getBiasText(item.bias)}</div>
+        ${imageTag}
+        <h2>${item.title}</h2>
+        <p>${textOnlyDesc}</p>
+        <a class="read-more" href="${item.link}" target="_blank">Læs mere</a>
+      `;
+
+      prevBtn.disabled = index === 0;
+      nextBtn.disabled = index >= articles.length - 1;
+    }
+
+    function handleSwipe(direction) {
+      if (direction === 'up') {
+        if (currentIndex < articles.length - 1) {
+          currentIndex++;
+          showCardWithAnimation(currentIndex, 'up');
+        }
+      } else if (direction === 'down') {
+        if (currentIndex > 0) {
+          currentIndex--;
+          showCardWithAnimation(currentIndex, 'down');
+        }
+      }
+    }
+
+    function showCardWithAnimation(index, direction) {
+        const card = document.getElementById('newsCard');
+      
+        if (index < 0 || index >= articles.length) {
+          return;
+        }
+      
+        const translateY = direction === 'up' ? '-100%' : '100%';
+        card.style.transition = 'transform 0.3s ease-out';
+        card.style.transform = `translateY(${translateY})`;
+      
+        setTimeout(() => {
+          showCard(index);
+          card.style.transition = 'none';
+          card.style.transform = 'translateY(0)';
+        }, 300);
+      }
+
+    function onMouseDown(e) {
+      isDragging = true;
+      startY = e.clientY - currentY;
+      const card = document.getElementById('newsCard');
+      card.style.transition = 'none';
+    }
+
+    function onMouseUp(e) {
+      if (isDragging) {
+        const diffY = e.clientY - startY;
+        if (Math.abs(diffY) > dragThreshold) {
+          if (diffY > 0) {
+            handleSwipe('down');
+          } else {
+            handleSwipe('up');
+          }
+        } else {
+          const card = document.getElementById('newsCard');
+          card.style.transition = 'transform 0.3s ease-out';
+          card.style.transform = 'translateY(0)';
+        }
+        isDragging = false;
+        const card = document.getElementById('newsCard');
+        document.documentElement.style.cursor = 'default';
+      }
+    }
+
+    function onMouseMove(e) {
+      if (!isDragging) return;
+      document.documentElement.style.cursor = 'grabbing';
+      let diffY = e.clientY - startY;
+      const card = document.getElementById('newsCard');
+      card.style.transform = `translateY(${diffY}px)`;
+    }
+
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        showCardWithAnimation(currentIndex, 'down');
+      }
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (currentIndex < articles.length - 1) {
+        currentIndex++;
+        showCardWithAnimation(currentIndex, 'up');
+      }
+    });
+
+    const card = document.getElementById('newsCard');
+    card.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseleave', onMouseUp);
+
+    fetchRSS();
+    showCard(currentIndex);
+  </script>
+</body>
+</html>
