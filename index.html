@@ -48,6 +48,7 @@
       max-width: 600px;
       cursor: grab;
       user-select: none;
+      touch-action: none; /* Prevents default touch behaviors like scrolling */
     }
 
     .news-card:active {
@@ -205,6 +206,8 @@
     let startY = 0;
     let currentY = 0;
     const dragThreshold = 200;
+    let isTouchDragging = false;
+    let touchStartY = 0;
 
     function getBiasText(bias) {
       switch (bias) {
@@ -282,22 +285,22 @@
     }
 
     function showCardWithAnimation(index, direction) {
-        const card = document.getElementById('newsCard');
-      
-        if (index < 0 || index >= articles.length) {
-          return;
-        }
-      
-        const translateY = direction === 'up' ? '-100%' : '100%';
-        card.style.transition = 'transform 0.3s ease-out';
-        card.style.transform = `translateY(${translateY})`;
-      
-        setTimeout(() => {
-          showCard(index);
-          card.style.transition = 'none';
-          card.style.transform = 'translateY(0)';
-        }, 300);
+      const card = document.getElementById('newsCard');
+    
+      if (index < 0 || index >= articles.length) {
+        return;
       }
+    
+      const translateY = direction === 'up' ? '-100%' : '100%';
+      card.style.transition = 'transform 0.3s ease-out';
+      card.style.transform = `translateY(${translateY})`;
+    
+      setTimeout(() => {
+        showCard(index);
+        card.style.transition = 'none';
+        card.style.transform = 'translateY(0)';
+      }, 300);
+    }
 
     function onMouseDown(e) {
       isDragging = true;
@@ -321,7 +324,6 @@
           card.style.transform = 'translateY(0)';
         }
         isDragging = false;
-        const card = document.getElementById('newsCard');
         document.documentElement.style.cursor = 'default';
       }
     }
@@ -332,6 +334,45 @@
       let diffY = e.clientY - startY;
       const card = document.getElementById('newsCard');
       card.style.transform = `translateY(${diffY}px)`;
+    }
+
+    function onTouchStart(e) {
+      if (e.touches.length === 1) {
+        isTouchDragging = true;
+        touchStartY = e.touches[0].clientY;
+        const card = document.getElementById('newsCard');
+        card.style.transition = 'none';
+        e.preventDefault(); // Prevent default scrolling
+      }
+    }
+
+    function onTouchMove(e) {
+      if (!isTouchDragging || e.touches.length !== 1) return;
+      const currentY = e.touches[0].clientY;
+      const diffY = currentY - touchStartY;
+      const card = document.getElementById('newsCard');
+      card.style.transform = `translateY(${diffY}px)`;
+      e.preventDefault(); // Continue preventing scrolling
+    }
+
+    function onTouchEnd(e) {
+      if (!isTouchDragging) return;
+      const touchEndY = e.changedTouches[0].clientY;
+      const diffY = touchEndY - touchStartY;
+      const card = document.getElementById('newsCard');
+      if (Math.abs(diffY) > 50) { // Threshold for swipe detection
+        if (diffY > 0) {
+          handleSwipe('down'); // Swipe down goes to previous article
+        } else {
+          handleSwipe('up'); // Swipe up goes to next article
+        }
+      } else {
+        // Reset transform if swipe distance is too small
+        card.style.transition = 'transform 0.3s ease-out';
+        card.style.transform = 'translateY(0)';
+      }
+      isTouchDragging = false;
+      touchStartY = 0;
     }
 
     document.getElementById('prevBtn').addEventListener('click', () => {
@@ -353,6 +394,9 @@
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseleave', onMouseUp);
+    card.addEventListener('touchstart', onTouchStart);
+    document.addEventListener('touchmove', onTouchMove);
+    document.addEventListener('touchend', onTouchEnd);
 
     fetchRSS();
     showCard(currentIndex);
